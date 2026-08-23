@@ -49,7 +49,7 @@ export default function DigitalTwinAvatar({ pitch, roll, status }) {
   const isCritical = status === 'CRITICAL';
   
   return (
-    <div className="w-full h-full min-h-[400px] bg-[#111111] rounded-xl border border-neutral-800 overflow-hidden relative">
+    <div className="w-full h-[500px] bg-[#111111] rounded-xl border border-neutral-800 overflow-hidden relative">
       <div className="absolute top-4 left-4 z-10 text-xs font-mono text-neutral-400 bg-black/50 px-2 py-1 rounded">
         3D KINEMATICS | PITCH: {pitch.toFixed(1)}° | ROLL: {roll.toFixed(1)}°
       </div>
