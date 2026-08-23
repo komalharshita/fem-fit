@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sqlite-explorer": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sqlite"],
+      "env": {
+        "DB_PATH": "./app_build/production.db"
+      }
+    }
+  }
+}
