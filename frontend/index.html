@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-neutral-950">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FemFit-Industrial // Edge-AI Safety Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            black: '#080808',
+                            dark: '#121212',
+                            lime: '#B5E61D',
+                            yellow: '#F2C94C',
+                            red: '#FF4B4B'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PapaParse for CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Montserrat/Calibri Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;900&family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+        }
+        h1, h2, h3, .all-caps {
+            font-family: 'Montserrat', sans-serif;
+            letter-spacing: 0.05em;
+        }
+        /* Custom neon scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #080808;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #B5E61D;
+            border-radius: 3px;
+        }
+        .neon-border-lime {
+            box-shadow: 0 0 10px rgba(181, 230, 29, 0.15);
+            border: 1px solid rgba(181, 230, 29, 0.4);
+        }
+        .neon-border-yellow {
+            box-shadow: 0 0 10px rgba(242, 201, 76, 0.15);
+            border: 1px solid rgba(242, 201, 76, 0.4);
+        }
+        .neon-border-red {
+            box-shadow: 0 0 10px rgba(255, 75, 75, 0.15);
+            border: 1px solid rgba(255, 75, 75, 0.4);
+        }
+    </style>
+</head>
+<body class="h-full text-white bg-brand-black flex flex-col selection:bg-brand-lime selection:text-black">
+
+    <!-- Header -->
+    <header class="border-b border-neutral-800 bg-brand-dark px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="h-8 w-1.5 bg-brand-lime rounded-full"></div>
+            <div>
+                <span class="text-xs text-brand-yellow font-bold uppercase tracking-widest">The Gilded Girl</span>
+                <h1 class="text-xl md:text-2xl font-black text-white flex items-center gap-2">
+                    FEMFIT - INDUSTRIAL <span class="text-xs font-normal border border-brand-lime text-brand-lime px-2 py-0.5 rounded">POC v1.0</span>
+                </h1>
+            </div>
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded bg-neutral-900 border border-neutral-800">
+                <span id="system-status-indicator" class="h-2.5 w-2.5 bg-green-500 rounded-full animate-pulse"></span>
+                <span id="system-status-text" class="text-xs font-bold uppercase tracking-wider text-neutral-400">EDGE CONNECTED</span>
+            </div>
+            <!-- Audio toggle button -->
+            <button id="btn-audio-toggle" class="p-2 bg-neutral-900 border border-neutral-800 hover:border-brand-lime text-neutral-500 hover:text-white rounded transition-colors" title="Toggle Haptic Sound Emulation">
+                <i data-lucide="volume-x" class="h-5 w-5"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Grid -->
+    <main class="flex-1 p-6 grid grid-cols-1 xl:grid-cols-4 gap-6 overflow-y-auto">
+
+        <!-- Column 1: Device Control & Telemetry Import -->
+        <div class="space-y-6 xl:col-span-1">
+            
+            <!-- Controls Card -->
+            <div class="bg-brand-dark rounded-xl p-5 border border-neutral-800 flex flex-col justify-between h-fit space-y-4">
+                <div class="flex justify-between items-center border-b border-neutral-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase text-brand-lime flex items-center gap-2">
+                        <i data-lucide="sliders" class="h-4 w-4"></i> SIMULATOR CONTROLS
+                    </h2>
+                    <span id="playback-time" class="text-xs font-mono text-neutral-400">00.00s</span>
+                </div>
+
+                <!-- File upload or select preloaded data -->
+                <div class="space-y-3">
+                    <label class="block text-xs font-bold uppercase text-neutral-400">Select Simulated Task</label>
+                    <select id="csv-preset-selector" class="w-full bg-neutral-900 border border-neutral-800 text-white rounded p-2 text-sm focus:outline-none focus:border-brand-lime">
+                        <option value="">-- Upload Custom CSV or Select Presets --</option>
+                        <option value="safe">Preset: Safe Ergonomic Lift / Walking</option>
+                        <option value="bend">Preset: Unsafe Spinal Flexion (Bending)</option>
+                        <option value="twist">Preset: Asymmetric Spine Twisting</option>
+                        <option value="vibe">Preset: Machinery Micro-Vibration Hazard</option>
+                    </select>
+
+                    <div class="relative flex items-center justify-center">
+                        <label for="csv-file-input" class="w-full flex flex-col items-center justify-center border border-dashed border-neutral-700 hover:border-brand-lime bg-neutral-900 hover:bg-neutral-900/50 rounded-lg p-4 cursor-pointer group transition-all">
+                            <i data-lucide="upload-cloud" class="h-6 w-6 text-neutral-500 group-hover:text-brand-lime transition-colors"></i>
+                            <span class="text-xs text-neutral-400 mt-2">Upload Local CSV Data File</span>
+                            <input id="csv-file-input" type="file" accept=".csv" class="hidden" />
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Info Box -->
+                <div id="file-info-box" class="hidden text-xs bg-neutral-950 p-3 rounded border border-neutral-900 text-neutral-400 space-y-1 font-mono">
+                    <div class="text-brand-lime font-bold uppercase">FILE LOADED</div>
+                    <div id="file-name" class="truncate">data.csv</div>
+                    <div id="file-rows">0 rows</div>
+                </div>
+
+                <!-- Simulation Action Buttons -->
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="btn-play" class="py-2.5 px-2 bg-neutral-900 border border-neutral-800 hover:border-brand-lime hover:bg-brand-lime/10 font-bold uppercase text-xs rounded flex justify-center items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i data-lucide="play" class="h-3.5 w-3.5 fill-current"></i> PLAY
+                    </button>
+                    <button id="btn-pause" class="py-2.5 px-2 bg-neutral-900 border border-neutral-800 hover:border-brand-yellow hover:bg-brand-yellow/10 font-bold uppercase text-xs rounded flex justify-center items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i data-lucide="pause" class="h-3.5 w-3.5 fill-current"></i> PAUSE
+                    </button>
+                    <button id="btn-reset" class="py-2.5 px-2 bg-neutral-900 border border-neutral-800 hover:border-brand-red hover:bg-brand-red/10 font-bold uppercase text-xs rounded flex justify-center items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i> RESET
+                    </button>
+                </div>
+
+                <!-- Progress & Speed -->
+                <div class="space-y-3 pt-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">Simulation Progress</span>
+                        <span id="simulation-percentage" class="font-mono text-brand-lime">0%</span>
+                    </div>
+                    <div class="w-full bg-neutral-900 h-1.5 rounded-full overflow-hidden border border-neutral-800">
+                        <div id="simulation-progress-bar" class="w-0 bg-brand-lime h-full transition-all duration-100"></div>
+                    </div>
+                    
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-neutral-400">Playback Speed</span>
+                        <div class="flex gap-1">
+                            <button id="speed-1x" class="px-2 py-0.5 bg-brand-lime text-black font-bold rounded text-[10px] tracking-wider transition-colors">1X</button>
+                            <button id="speed-2x" class="px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white font-bold rounded text-[10px] tracking-wider transition-colors">2X</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ergonomic Framework Scorecard -->
+            <div class="bg-brand-dark rounded-xl p-5 border border-neutral-800 space-y-4">
+                <h2 class="text-sm font-bold uppercase text-brand-lime flex items-center gap-2 border-b border-neutral-800 pb-3">
+                    <i data-lucide="scale" class="h-4 w-4"></i> RULA/REBA METRICS
+                </h2>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-neutral-950 p-4 rounded border border-neutral-900 flex flex-col justify-between">
+                        <span class="text-[10px] font-bold text-neutral-500 uppercase">Trunk Flexion (Pitch)</span>
+                        <div class="flex items-baseline gap-1 mt-1">
+                            <span id="ergo-pitch-val" class="text-2xl font-black font-mono">0.0°</span>
+                        </div>
+                        <span id="ergo-pitch-status" class="text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-neutral-900 text-green-500 w-fit">NEUTRAL</span>
+                    </div>
+
+                    <div class="bg-neutral-950 p-4 rounded border border-neutral-900 flex flex-col justify-between">
+                        <span class="text-[10px] font-bold text-neutral-500 uppercase">Spine Twist (Roll)</span>
+                        <div class="flex items-baseline gap-1 mt-1">
+                            <span id="ergo-roll-val" class="text-2xl font-black font-mono">0.0°</span>
+                        </div>
+                        <span id="ergo-roll-status" class="text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-neutral-900 text-green-500 w-fit">SYMMETRIC</span>
+                    </div>
+                </div>
+
+                <!-- Vibration status -->
+                <div class="bg-neutral-950 p-4 rounded border border-neutral-900 space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-[10px] font-bold text-neutral-500 uppercase">Machinery Vibration Variance</span>
+                        <span id="ergo-vibe-val" class="font-mono text-xs font-bold text-green-500">0.00</span>
+                    </div>
+                    <div class="w-full bg-neutral-900 h-2 rounded border border-neutral-800 overflow-hidden">
+                        <div id="ergo-vibe-bar" class="w-0 h-full bg-green-500 transition-all duration-200"></div>
+                    </div>
+                    <div class="flex justify-between items-center text-[9px] text-neutral-500">
+                        <span>SAFE (<2.25)</span>
+                        <span>DANGER (>=2.25)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2 & 3: Posture Animation & Real-Time Charts -->
+        <div class="xl:col-span-2 space-y-6 flex flex-col">
+            
+            <!-- Live Spine Visualization (HTML Canvas) -->
+            <div class="bg-brand-dark rounded-xl p-5 border border-neutral-800 flex-1 flex flex-col">
+                <h2 class="text-sm font-bold uppercase text-brand-lime flex items-center gap-2 border-b border-neutral-800 pb-3">
+                    <i data-lucide="accessibility" class="h-4 w-4"></i> LIVE SPINE POSTURE VISUALIZATION
+                </h2>
+                
+                <div class="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 items-center justify-center p-4">
+                    <!-- Left view: Side view / Pitch flexion -->
+                    <div class="flex flex-col items-center">
+                        <span class="text-xs font-bold text-neutral-400 uppercase mb-2">Trunk Flexion (Side Profile)</span>
+                        <div class="bg-neutral-950 p-2 rounded-xl border border-neutral-900 flex justify-center items-center w-full max-w-[280px] aspect-square relative overflow-hidden">
+                            <canvas id="canvas-posture-side" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+                    <!-- Right view: Front view / Roll twist -->
+                    <div class="flex flex-col items-center">
+                        <span class="text-xs font-bold text-neutral-400 uppercase mb-2">Spine Lateral Tilt (Front Profile)</span>
+                        <div class="bg-neutral-950 p-2 rounded-xl border border-neutral-900 flex justify-center items-center w-full max-w-[280px] aspect-square relative overflow-hidden">
+                            <canvas id="canvas-posture-front" class="w-full h-full"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Waveform plots -->
+            <div class="bg-brand-dark rounded-xl p-5 border border-neutral-800 h-[280px] flex flex-col">
+                <div class="flex justify-between items-center border-b border-neutral-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase text-brand-lime flex items-center gap-2">
+                        <i data-lucide="activity" class="h-4 w-4"></i> REAL-TIME IMU WAVEFORM PLOTS
+                    </h2>
+                    <div class="flex gap-4 text-xs">
+                        <button id="chart-tab-accel" class="text-brand-lime font-bold border-b border-brand-lime pb-1">ACCELERATION (m/s²)</button>
+                        <button id="chart-tab-gyro" class="text-neutral-400 hover:text-white pb-1">GYROSCOPE (deg/s)</button>
+                    </div>
+                </div>
+                <div class="flex-1 min-h-0 pt-3 relative">
+                    <canvas id="chart-imu" class="w-full h-full"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 4: Alert Monitor Log -->
+        <div class="space-y-6 xl:col-span-1 flex flex-col h-full">
+            
+            <!-- Live Status Alert Card -->
+            <div id="live-alert-card" class="bg-brand-dark rounded-xl p-5 border border-neutral-800 flex flex-col items-center justify-center text-center p-6 space-y-3 transition-all duration-300">
+                <span class="text-xs font-bold uppercase tracking-wider text-neutral-500">LIVE ALARM STATUS</span>
+                
+                <div id="live-alert-icon-box" class="h-16 w-16 rounded-full bg-neutral-900 flex justify-center items-center text-green-500 border border-neutral-800 transition-colors duration-300">
+                    <i id="live-alert-icon" data-lucide="shield-check" class="h-8 w-8"></i>
+                </div>
+                
+                <h3 id="live-alert-title" class="text-lg font-black text-green-500">SAFE ENVIRONMENT</h3>
+                <p id="live-alert-desc" class="text-xs text-neutral-400">Biomechanics and machinery vibration fall within safe dynamic thresholds.</p>
+            </div>
+
+            <!-- Log Card -->
+            <div class="bg-brand-dark rounded-xl p-5 border border-neutral-800 flex-1 flex flex-col space-y-3 min-h-[300px]">
+                <div class="flex justify-between items-center border-b border-neutral-800 pb-3">
+                    <h2 class="text-sm font-bold uppercase text-brand-lime flex items-center gap-2">
+                        <i data-lucide="history" class="h-4 w-4"></i> SYSTEM ANOMALY LOGS
+                    </h2>
+                    <button id="btn-clear-logs" class="text-[10px] font-bold text-neutral-500 hover:text-brand-red uppercase transition-colors">CLEAR</button>
+                </div>
+
+                <div id="log-list" class="flex-1 overflow-y-auto space-y-2 text-xs font-mono max-h-[450px] pr-1">
+                    <!-- Log entries -->
+                    <div class="text-neutral-500 italic text-center py-4">No alert logs recorded yet.</div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Synthetic presets definition (stored in code) -->
+    <script>
+        // Preset generator helper to load data instantly without files
+        // Matches the generate_data.py logic
+        function generatePresetData(type) {
+            const sampleRate = 50;
+            const duration = 10;
+            const len = sampleRate * duration;
+            const data = [];
+            
+            for(let i=0; i<len; i++) {
+                const t = i * (1000 / sampleRate); // ms
+                let ax = 0, ay = 9.81, az = 0;
+                let gx = 0, gy = 0, gz = 0;
+                
+                const noise = (std) => (Math.random() - 0.5) * 2 * std;
+                const val_t = i / sampleRate;
+
+                if (type === 'safe') {
+                    // Simulates walking periodicity
+                    const gait_freq = 1.8;
+                    ay = 9.81 + 1.5 * Math.sin(2 * Math.PI * gait_freq * val_t);
+                    ax = 0.5 * Math.sin(2 * Math.PI * (gait_freq / 2) * val_t);
+                    az = 0.3 * Math.sin(2 * Math.PI * gait_freq * val_t);
+                    gx = 6.0 * Math.cos(2 * Math.PI * gait_freq * val_t);
+                    gy = 4.0 * Math.cos(2 * Math.PI * (gait_freq / 2) * val_t);
+                    gz = 8.0 * Math.sin(2 * Math.PI * (gait_freq / 2) * val_t);
+                    
+                    ax += noise(0.15);
+                    ay += noise(0.15);
+                    az += noise(0.15);
+                    gx += noise(1.2);
+                    gy += noise(1.2);
+                    gz += noise(1.2);
+
+                } else if (type === 'bend') {
+                    // Severe bending flexion: pitch goes up to 60 degrees, holds, and returns
+                    let pitch = 0;
+                    if (val_t >= 2.0 && val_t < 4.5) {
+                        pitch = 60.0 * (0.5 - 0.5 * Math.cos(Math.PI * (val_t - 2.0) / 2.5));
+                    } else if (val_t >= 4.5 && val_t < 7.0) {
+                        pitch = 60.0;
+                    } else if (val_t >= 7.0 && val_t < 9.0) {
+                        pitch = 60.0 * (0.5 + 0.5 * Math.cos(Math.PI * (val_t - 7.0) / 2.0));
+                    }
+                    const pitch_rad = pitch * Math.PI / 180.0;
+                    ay = 9.81 * Math.cos(pitch_rad);
+                    az = 9.81 * Math.sin(pitch_rad);
+                    
+                    // Gx derivative
+                    if (val_t >= 2.0 && val_t < 4.5) {
+                        gx = 60.0 * 0.5 * Math.sin(Math.PI * (val_t - 2.0) / 2.5) * (Math.PI / 2.5);
+                    } else if (val_t >= 7.0 && val_t < 9.0) {
+                        gx = -60.0 * 0.5 * Math.sin(Math.PI * (val_t - 7.0) / 2.0) * (Math.PI / 2.0);
+                    }
+                    
+                    ax += noise(0.1);
+                    ay += noise(0.12);
+                    az += noise(0.12);
+                    gx += noise(1.5);
+                    gy += noise(1.0);
+                    gz += noise(1.0);
+
+                } else if (type === 'twist') {
+                    // Twist asymmetry: roll goes to 28 degrees, combined with Gy twisting
+                    let roll = 0;
+                    if (val_t >= 2.0 && val_t < 4.5) {
+                        roll = 28.0 * (0.5 - 0.5 * Math.cos(Math.PI * (val_t - 2.0) / 2.5));
+                    } else if (val_t >= 4.5 && val_t < 7.0) {
+                        roll = 28.0;
+                    } else if (val_t >= 7.0 && val_t < 9.5) {
+                        roll = 28.0 * (0.5 + 0.5 * Math.cos(Math.PI * (val_t - 7.0) / 2.5));
+                    }
+                    
+                    if (val_t >= 2.0 && val_t < 3.5) {
+                        gy = 25.0 * Math.sin(Math.PI * (val_t - 2.0) / 1.5);
+                    } else if (val_t >= 7.0 && val_t < 8.5) {
+                        gy = -25.0 * Math.sin(Math.PI * (val_t - 7.0) / 1.5);
+                    }
+                    
+                    const roll_rad = roll * Math.PI / 180.0;
+                    ax = 9.81 * Math.sin(roll_rad);
+                    ay = 9.81 * Math.cos(roll_rad);
+                    
+                    if (val_t >= 2.0 && val_t < 4.5) {
+                        gz = 28.0 * 0.5 * Math.sin(Math.PI * (val_t - 2.0) / 2.5) * (Math.PI / 2.5);
+                    } else if (val_t >= 7.0 && val_t < 9.5) {
+                        gz = -28.0 * 0.5 * Math.sin(Math.PI * (val_t - 7.0) / 2.5) * (Math.PI / 2.5);
+                    }
+                    
+                    ax += noise(0.12);
+                    ay += noise(0.12);
+                    az += noise(0.1);
+                    gx += noise(1.0);
+                    gy += noise(1.5);
+                    gz += noise(1.5);
+
+                } else if (type === 'vibe') {
+                    // Superimposed heavy vibration: 22Hz, 31Hz, 38Hz sinusoidal overlays
+                    const vibe_ax = 4.5 * Math.sin(2 * Math.PI * 22 * val_t) + 3.0 * Math.sin(2 * Math.PI * 31 * val_t);
+                    const vibe_ay = 5.0 * Math.sin(2 * Math.PI * 22 * val_t) + 2.5 * Math.sin(2 * Math.PI * 38 * val_t);
+                    const vibe_az = 3.5 * Math.sin(2 * Math.PI * 31 * val_t) + 2.0 * Math.sin(2 * Math.PI * 38 * val_t);
+                    const vibe_gx = 35.0 * Math.sin(2 * Math.PI * 22 * val_t);
+                    const vibe_gy = 25.0 * Math.sin(2 * Math.PI * 31 * val_t);
+                    const vibe_gz = 30.0 * Math.sin(2 * Math.PI * 38 * val_t);
+                    
+                    ax = vibe_ax + noise(0.2);
+                    ay = 9.81 + vibe_ay + noise(0.2);
+                    az = vibe_az + noise(0.2);
+                    gx = vibe_gx + noise(2.0);
+                    gy = vibe_gy + noise(2.0);
+                    gz = vibe_gz + noise(2.0);
+                }
+                
+                data.push({ timestamp: t, ax, ay, az, gx, gy, gz });
+            }
+            return data;
+        }
+    </script>
+
+    <!-- Main Logic -->
+    <script>
+        // DOM Elements
+        const fileInput = document.getElementById('csv-file-input');
+        const selector = document.getElementById('csv-preset-selector');
+        const fileInfoBox = document.getElementById('file-info-box');
+        const fileName = document.getElementById('file-name');
+        const fileRows = document.getElementById('file-rows');
+        
+        const btnPlay = document.getElementById('btn-play');
+        const btnPause = document.getElementById('btn-pause');
+        const btnReset = document.getElementById('btn-reset');
+        
+        const timeLabel = document.getElementById('playback-time');
+        const progressPercentage = document.getElementById('simulation-percentage');
+        const progressBar = document.getElementById('simulation-progress-bar');
+        const speed1x = document.getElementById('speed-1x');
+        const speed2x = document.getElementById('speed-2x');
+        
+        const ergoPitchVal = document.getElementById('ergo-pitch-val');
+        const ergoPitchStatus = document.getElementById('ergo-pitch-status');
+        const ergoRollVal = document.getElementById('ergo-roll-val');
+        const ergoRollStatus = document.getElementById('ergo-roll-status');
+        const ergoVibeVal = document.getElementById('ergo-vibe-val');
+        const ergoVibeBar = document.getElementById('ergo-vibe-bar');
+        
+        const liveAlertCard = document.getElementById('live-alert-card');
+        const liveAlertIconBox = document.getElementById('live-alert-icon-box');
+        const liveAlertIcon = document.getElementById('live-alert-icon');
+        const liveAlertTitle = document.getElementById('live-alert-title');
+        const liveAlertDesc = document.getElementById('live-alert-desc');
+        const logList = document.getElementById('log-list');
+        const btnClearLogs = document.getElementById('btn-clear-logs');
+        const btnAudioToggle = document.getElementById('btn-audio-toggle');
+
+        // Web Audio Synthesizer for Haptic Beeps
+        let audioContext = null;
+        let audioEnabled = false;
+        let audioInterval = null;
+        let currentHapticPattern = 'none';
+
+        function initAudio() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        btnAudioToggle.addEventListener('click', () => {
+            initAudio();
+            audioEnabled = !audioEnabled;
+            if (audioEnabled) {
+                btnAudioToggle.innerHTML = '<i data-lucide="volume-2" class="h-5 w-5 text-brand-lime"></i>';
+                btnAudioToggle.classList.add('border-brand-lime');
+            } else {
+                btnAudioToggle.innerHTML = '<i data-lucide="volume-x" class="h-5 w-5 text-neutral-505"></i>';
+                btnAudioToggle.classList.remove('border-brand-lime');
+                stopHapticBeeps();
+            }
+            lucide.createIcons();
+        });
+
+        function playBeep(freq, duration, type='sine') {
+            if (!audioEnabled || !audioContext) return;
+            try {
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioContext.currentTime);
+                
+                gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + duration);
+                
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                
+                osc.start();
+                osc.stop(audioContext.currentTime + duration);
+            } catch(e) {
+                console.error("Audio play error", e);
+            }
+        }
+
+        function triggerHapticBeeps(pattern) {
+            if (currentHapticPattern === pattern) return;
+            currentHapticPattern = pattern;
+            
+            clearInterval(audioInterval);
+            if (pattern === 'none') {
+                return;
+            }
+            
+            if (pattern === 'warn') {
+                // Posture warning: 200ms ON, 400ms OFF (total 600ms cycle)
+                audioInterval = setInterval(() => {
+                    playBeep(800, 0.2);
+                }, 600);
+            } else if (pattern === 'crit') {
+                // Critical posture: 100ms ON, 100ms OFF, 100ms ON, 500ms OFF (double rapid beep)
+                audioInterval = setInterval(() => {
+                    playBeep(1200, 0.1, 'sawtooth');
+                    setTimeout(() => {
+                        playBeep(1200, 0.1, 'sawtooth');
+                    }, 200);
+                }, 800);
+            } else if (pattern === 'vibe') {
+                // Vibration alert: 800ms ON, 200ms OFF
+                audioInterval = setInterval(() => {
+                    playBeep(220, 0.8, 'square');
+                }, 1000);
+            }
+        }
+
+        function stopHapticBeeps() {
+            clearInterval(audioInterval);
+            currentHapticPattern = 'none';
+        }
+
+        // Global Simulation State
+        let telemetryData = [];
+        let currentIndex = 0;
+        let isPlaying = false;
+        let simulationTimer = null;
+        let chartTab = 'accel'; // 'accel' or 'gyro'
+        let playbackSpeed = 1; // 1 or 2 (multiplies time step)
+        
+        // Complementary Filter & Vibration Variables
+        let estimatedPitch = 0;
+        let estimatedRoll = 0;
+        const ALPHA = 0.98;
+        const DT = 0.02; // 20ms steps
+        
+        const vibeWindowSize = 10;
+        let accelMagBuffer = [];
+        
+        // Chart Config
+        const maxChartPoints = 100;
+        const chartCtx = document.getElementById('chart-imu').getContext('2d');
+        const imuChart = new Chart(chartCtx, {
+            type: 'line',
+            data: {
+                labels: Array.from({length: maxChartPoints}, (_, i) => ''),
+                datasets: [
+                    {
+                        label: 'X Axis',
+                        data: [],
+                        borderColor: '#FF4B4B',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Y Axis',
+                        data: [],
+                        borderColor: '#B5E61D',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Z Axis',
+                        data: [],
+                        borderColor: '#00A3FF',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                scales: {
+                    x: { display: false },
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        ticks: { color: '#888', font: { family: 'monospace' } }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        labels: { color: '#ccc', font: { family: 'Outfit', size: 10 } }
+                    }
+                }
+            }
+        });
+
+        // Toggle Chart Tab
+        document.getElementById('chart-tab-accel').addEventListener('click', (e) => {
+            chartTab = 'accel';
+            e.target.className = "text-brand-lime font-bold border-b border-brand-lime pb-1";
+            document.getElementById('chart-tab-gyro').className = "text-neutral-400 hover:text-white pb-1";
+            resetChartData();
+        });
+
+        document.getElementById('chart-tab-gyro').addEventListener('click', (e) => {
+            chartTab = 'gyro';
+            e.target.className = "text-brand-lime font-bold border-b border-brand-lime pb-1";
+            document.getElementById('chart-tab-accel').className = "text-neutral-400 hover:text-white pb-1";
+            resetChartData();
+        });
+
+        function resetChartData() {
+            imuChart.data.datasets[0].data = [];
+            imuChart.data.datasets[1].data = [];
+            imuChart.data.datasets[2].data = [];
+            imuChart.update();
+        }
+
+        // speed controls
+        speed1x.addEventListener('click', () => {
+            playbackSpeed = 1;
+            speed1x.className = "px-2 py-0.5 bg-brand-lime text-black font-bold rounded text-[10px] tracking-wider transition-colors";
+            speed2x.className = "px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white font-bold rounded text-[10px] tracking-wider transition-colors";
+        });
+        speed2x.addEventListener('click', () => {
+            playbackSpeed = 2;
+            speed2x.className = "px-2 py-0.5 bg-brand-lime text-black font-bold rounded text-[10px] tracking-wider transition-colors";
+            speed1x.className = "px-2 py-0.5 bg-neutral-900 hover:bg-neutral-800 text-neutral-400 hover:text-white font-bold rounded text-[10px] tracking-wider transition-colors";
+        });
+
+        // Canvases for 2D Spines
+        const sideCanvas = document.getElementById('canvas-posture-side');
+        const frontCanvas = document.getElementById('canvas-posture-front');
+        const sideCtx = sideCanvas.getContext('2d');
+        const frontCtx = frontCanvas.getContext('2d');
+
+        function resizeCanvases() {
+            const sideParent = sideCanvas.parentElement;
+            sideCanvas.width = sideParent.clientWidth * window.devicePixelRatio;
+            sideCanvas.height = sideParent.clientHeight * window.devicePixelRatio;
+            frontCanvas.width = sideParent.clientWidth * window.devicePixelRatio;
+            frontCanvas.height = sideParent.clientHeight * window.devicePixelRatio;
+            sideCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            frontCtx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+        setTimeout(resizeCanvases, 100);
+
+        function drawSkeleton(ctx, type, angleVal) {
+            const w = ctx.canvas.width / window.devicePixelRatio;
+            const h = ctx.canvas.height / window.devicePixelRatio;
+            ctx.clearRect(0,0,w,h);
+            
+            const centerX = w / 2;
+            const hipY = h * 0.75;
+            
+            // Draw floor
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(w*0.1, hipY + 30);
+            ctx.lineTo(w*0.9, hipY + 30);
+            ctx.stroke();
+
+            // Draw Legs
+            ctx.strokeStyle = '#555';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(centerX - 15, hipY + 30);
+            ctx.lineTo(centerX - 10, hipY);
+            ctx.lineTo(centerX + 10, hipY);
+            ctx.lineTo(centerX + 15, hipY + 30);
+            ctx.stroke();
+
+            // Angle math
+            const angleRad = angleVal * Math.PI / 180.0;
+            const spineLength = h * 0.35;
+            
+            let headX, headY;
+            
+            if (type === 'side') {
+                // Side view: forward flexion
+                headX = centerX + spineLength * Math.sin(angleRad);
+                headY = hipY - spineLength * Math.cos(angleRad);
+            } else {
+                // Front view: side lateral bending
+                headX = centerX + spineLength * Math.sin(angleRad);
+                headY = hipY - spineLength * Math.cos(angleRad);
+            }
+
+            // Draw Spine
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 5;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(centerX, hipY);
+            ctx.lineTo(headX, headY);
+            ctx.stroke();
+
+            // Highlight vest node
+            const vestNodeX = centerX + (spineLength * 0.8) * Math.sin(angleRad);
+            const vestNodeY = hipY - (spineLength * 0.8) * Math.cos(angleRad);
+            
+            ctx.fillStyle = '#B5E61D';
+            ctx.beginPath();
+            ctx.arc(vestNodeX, vestNodeY, 6, 0, 2*Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+
+            // Draw Head
+            ctx.fillStyle = '#eee';
+            ctx.beginPath();
+            const headOffsetX = headX + 10 * Math.sin(angleRad);
+            const headOffsetY = headY - 10 * Math.cos(angleRad);
+            ctx.arc(headOffsetX, headOffsetY, 14, 0, 2*Math.PI);
+            ctx.fill();
+
+            // Draw angle indicators text
+            ctx.fillStyle = '#B5E61D';
+            ctx.font = 'bold 12px Montserrat';
+            ctx.fillText(Math.round(angleVal) + '°', centerX - 20, hipY - 20);
+        }
+
+        // CSV parsing and UI updating
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            selector.value = ""; // Clear presets
+            parseCSVFile(file);
+        });
+
+        selector.addEventListener('change', (e) => {
+            const val = e.target.value;
+            if (!val) return;
+            
+            fileInput.value = ""; // Clear file
+            
+            // Generate simulated data
+            const data = generatePresetData(val);
+            loadTelemetryData(data, `Preset: ${selector.options[selector.selectedIndex].text}`);
+        });
+
+        function parseCSVFile(file) {
+            Papa.parse(file, {
+                header: true,
+                dynamicTyping: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    const data = results.data;
+                    // Validate columns
+                    if (data.length > 0 && ('ax' in data[0]) && ('ay' in data[0])) {
+                        loadTelemetryData(data, file.name);
+                    } else {
+                        alert("Invalid CSV format! Columns 'ax', 'ay', 'az', 'gx', 'gy', 'gz' are required.");
+                    }
+                }
+            });
+        }
+
+        function loadTelemetryData(data, name) {
+            stopSimulation();
+            telemetryData = data;
+            currentIndex = 0;
+            
+            fileInfoBox.classList.remove('hidden');
+            document.getElementById('file-name').innerText = name;
+            document.getElementById('file-rows').innerText = data.length + " rows loaded";
+            
+            btnPlay.disabled = false;
+            btnPause.disabled = true;
+            btnReset.disabled = false;
+            
+            // Set initial state
+            resetFilters();
+            updateDashboard(telemetryData[0]);
+        }
+
+        function resetFilters() {
+            estimatedPitch = 0;
+            estimatedRoll = 0;
+            accelMagBuffer = [];
+            resetChartData();
+        }
+
+        // Live status alerts tracking
+        let lastAlertTriggered = 'none';
+
+        function logAlert(message, type) {
+            const time = (currentIndex * DT).toFixed(2);
+            const entry = document.createElement('div');
+            
+            let colorClass = "text-neutral-400";
+            if (type === 'warn') {
+                colorClass = "text-brand-yellow font-semibold";
+                entry.innerHTML = `<span class="text-neutral-500">[${time}s]</span> <span class="${colorClass}">WARN: ${message}</span>`;
+            } else if (type === 'crit') {
+                colorClass = "text-brand-red font-bold";
+                entry.innerHTML = `<span class="text-neutral-500">[${time}s]</span> <span class="${colorClass}">ALERT: ${message}</span>`;
+            } else if (type === 'vibe') {
+                colorClass = "text-brand-yellow font-bold underline";
+                entry.innerHTML = `<span class="text-neutral-500">[${time}s]</span> <span class="${colorClass}">VIBE: ${message}</span>`;
+            }
+            
+            // Insert at the top of the logs
+            if (logList.firstChild && logList.firstChild.className === "text-neutral-500 italic text-center py-4") {
+                logList.innerHTML = "";
+            }
+            logList.insertBefore(entry, logList.firstChild);
+        }
+
+        btnClearLogs.addEventListener('click', () => {
+            logList.innerHTML = '<div class="text-neutral-500 italic text-center py-4">No alert logs recorded yet.</div>';
+        });
+
+        // Ergonomics Dynamic Calculations (Female Thresholds)
+        function updateDashboard(sample) {
+            if (!sample) return;
+
+            // 1. Raw IMU Conversion
+            const axVal = sample.ax;
+            const ayVal = sample.ay;
+            const azVal = sample.az;
+            const gxVal = sample.gx;
+            const gyVal = sample.gy;
+            const gzVal = sample.gz;
+
+            // 2. Complementary Filter
+            const pitch_acc = Math.atan2(azVal, Math.sqrt(axVal*axVal + ayVal*ayVal)) * 180.0 / Math.PI;
+            const roll_acc  = Math.atan2(-axVal, Math.sqrt(ayVal*ayVal + azVal*azVal)) * 180.0 / Math.PI;
+
+            estimatedPitch = ALPHA * (estimatedPitch + gxVal * DT) + (1.0 - ALPHA) * pitch_acc;
+            estimatedRoll  = ALPHA * (estimatedRoll + gzVal * DT) + (1.0 - ALPHA) * roll_acc;
+
+            // 3. Vibration Variance
+            const accelMag = Math.sqrt(axVal*axVal + ayVal*ayVal + azVal*azVal);
+            accelMagBuffer.push(accelMag);
+            if (accelMagBuffer.length > vibeWindowSize) {
+                accelMagBuffer.shift();
+            }
+
+            let variance = 0.0;
+            if (accelMagBuffer.length === vibeWindowSize) {
+                const sum = accelMagBuffer.reduce((a, b) => a + b, 0);
+                const mean = sum / vibeWindowSize;
+                const sqDiffSum = accelMagBuffer.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+                variance = sqDiffSum / vibeWindowSize;
+            }
+
+            // 4. Update UI numbers
+            ergoPitchVal.innerText = estimatedPitch.toFixed(1) + '°';
+            ergoRollVal.innerText = estimatedRoll.toFixed(1) + '°';
+            ergoVibeVal.innerText = variance.toFixed(2);
+            
+            // Adjust vibration bar
+            const vibePercentage = Math.min((variance / 5.0) * 100, 100);
+            ergoVibeBar.style.width = vibePercentage + '%';
+            if (variance >= 2.25) {
+                ergoVibeBar.className = "h-full bg-brand-red";
+                ergoVibeVal.className = "font-mono text-xs font-bold text-brand-red";
+            } else {
+                ergoVibeBar.className = "h-full bg-green-500";
+                ergoVibeVal.className = "font-mono text-xs font-bold text-green-500";
+            }
+
+            // 5. Update Skeletons
+            drawSkeleton(sideCtx, 'side', estimatedPitch);
+            drawSkeleton(frontCtx, 'front', estimatedRoll);
+
+            // 6. Update Charts
+            let currentDataset = [];
+            if (chartTab === 'accel') {
+                currentDataset = [axVal, ayVal, azVal];
+            } else {
+                currentDataset = [gxVal, gyVal, gzVal];
+            }
+            
+            imuChart.data.datasets[0].data.push(currentDataset[0]);
+            imuChart.data.datasets[1].data.push(currentDataset[1]);
+            imuChart.data.datasets[2].data.push(currentDataset[2]);
+            
+            if (imuChart.data.datasets[0].data.length > maxChartPoints) {
+                imuChart.data.datasets[0].data.shift();
+                imuChart.data.datasets[1].data.shift();
+                imuChart.data.datasets[2].data.shift();
+            }
+            imuChart.update();
+
+            // 7. Dynamic Alert Matrix (Priorities: Critical > Vibration > Warning > Safe)
+            let alertState = 'safe';
+            let alertTitle = 'SAFE ENVIRONMENT';
+            let alertDesc = 'Biomechanics and machinery vibration fall within safe dynamic thresholds.';
+            let alertHaptic = 'none';
+
+            const absPitch = Math.abs(estimatedPitch);
+            const absRoll = Math.abs(estimatedRoll);
+
+            // Check Critical Posture Flexion / Twisting
+            if (absPitch > 45.0 || absRoll > 15.0) {
+                alertState = 'crit';
+                alertTitle = 'CRITICAL STRAIN ALERT';
+                alertHaptic = 'crit';
+                if (absPitch > 45.0 && absRoll > 15.0) {
+                    alertDesc = 'Severe trunk flexion (' + absPitch.toFixed(0) + '°) with asymmetric spine rotation (' + absRoll.toFixed(0) + '°). HIGH RISK.';
+                } else if (absPitch > 45.0) {
+                    alertDesc = 'Severe forward spinal bending detected (' + absPitch.toFixed(0) + '°). Squat, do not stoop.';
+                } else {
+                    alertDesc = 'Dangerous asymmetric spine rotation (' + absRoll.toFixed(0) + '°). Lift straight forward.';
+                }
+            }
+            // Check machinery vibration
+            else if (variance >= 2.25) {
+                alertState = 'vibe';
+                alertTitle = 'VIBRATION STRAIN HAZARD';
+                alertDesc = 'Dangerous exposure to high-frequency mechanical micro-vibrations (RMS Dev: ' + Math.sqrt(variance).toFixed(2) + 'm/s²).';
+                alertHaptic = 'vibe';
+            }
+            // Check moderate posture warning
+            else if (absPitch > 20.0) {
+                alertState = 'warn';
+                alertTitle = 'POSTURE CORRECT ALARM';
+                alertDesc = 'Moderate spinal flexion (' + absPitch.toFixed(0) + ''). Please straighten spine to prevent fatigue.';
+                alertHaptic = 'warn';
+            }
+
+            // Update DOM Classes dynamically based on Alert Level
+            if (alertState === 'safe') {
+                liveAlertCard.className = "bg-brand-dark rounded-xl p-5 border border-neutral-800 flex flex-col items-center justify-center text-center p-6 space-y-3 transition-all duration-300 neon-border-lime";
+                liveAlertIconBox.className = "h-16 w-16 rounded-full bg-neutral-900 flex justify-center items-center text-brand-lime border border-neutral-800";
+                liveAlertIcon.setAttribute('data-lucide', 'shield-check');
+                liveAlertTitle.className = "text-lg font-black text-brand-lime";
+                liveAlertTitle.innerText = alertTitle;
+                liveAlertDesc.innerText = alertDesc;
+                
+                ergoPitchStatus.innerText = "NEUTRAL";
+                ergoPitchStatus.className = "text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-neutral-900 text-green-500 w-fit";
+                ergoRollStatus.innerText = "SYMMETRIC";
+                ergoRollStatus.className = "text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-neutral-900 text-green-500 w-fit";
+                
+                stopHapticBeeps();
+            } 
+            else if (alertState === 'warn') {
+                liveAlertCard.className = "bg-brand-dark rounded-xl p-5 border border-brand-yellow flex flex-col items-center justify-center text-center p-6 space-y-3 transition-all duration-300 neon-border-yellow";
+                liveAlertIconBox.className = "h-16 w-16 rounded-full bg-neutral-900 flex justify-center items-center text-brand-yellow border border-neutral-850";
+                liveAlertIcon.setAttribute('data-lucide', 'alert-triangle');
+                liveAlertTitle.className = "text-lg font-black text-brand-yellow";
+                liveAlertTitle.innerText = alertTitle;
+                liveAlertDesc.innerText = alertDesc;
+
+                ergoPitchStatus.innerText = "FLEXION WARNING";
+                ergoPitchStatus.className = "text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow w-fit";
+                
+                triggerHapticBeeps('warn');
+                if (lastAlertTriggered !== 'warn') {
+                    logAlert(alertDesc, 'warn');
+                }
+            } 
+            else if (alertState === 'vibe') {
+                liveAlertCard.className = "bg-brand-dark rounded-xl p-5 border border-brand-yellow flex flex-col items-center justify-center text-center p-6 space-y-3 transition-all duration-300 neon-border-yellow";
+                liveAlertIconBox.className = "h-16 w-16 rounded-full bg-neutral-900 flex justify-center items-center text-brand-yellow border border-neutral-850";
+                liveAlertIcon.setAttribute('data-lucide', 'activity');
+                liveAlertTitle.className = "text-lg font-black text-brand-yellow";
+                liveAlertTitle.innerText = alertTitle;
+                liveAlertDesc.innerText = alertDesc;
+                
+                triggerHapticBeeps('vibe');
+                if (lastAlertTriggered !== 'vibe') {
+                    logAlert(alertDesc, 'vibe');
+                }
+            }
+            else if (alertState === 'crit') {
+                liveAlertCard.className = "bg-brand-dark rounded-xl p-5 border border-brand-red flex flex-col items-center justify-center text-center p-6 space-y-3 transition-all duration-300 neon-border-red";
+                liveAlertIconBox.className = "h-16 w-16 rounded-full bg-neutral-900 flex justify-center items-center text-brand-red border border-neutral-855";
+                liveAlertIcon.setAttribute('data-lucide', 'octagon-alert');
+                liveAlertTitle.className = "text-lg font-black text-brand-red";
+                liveAlertTitle.innerText = alertTitle;
+                liveAlertDesc.innerText = alertDesc;
+
+                if (absPitch > 45.0) {
+                    ergoPitchStatus.innerText = "CRITICAL BEND";
+                    ergoPitchStatus.className = "text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-brand-red/10 text-brand-red w-fit";
+                }
+                if (absRoll > 15.0) {
+                    ergoRollStatus.innerText = "DANGEROUS TWIST";
+                    ergoRollStatus.className = "text-[9px] font-bold uppercase mt-2 px-1.5 py-0.5 rounded bg-brand-red/10 text-brand-red w-fit";
+                }
+
+                triggerHapticBeeps('crit');
+                if (lastAlertTriggered !== 'crit') {
+                    logAlert(alertDesc, 'crit');
+                }
+            }
+
+            lastAlertTriggered = alertState;
+            lucide.createIcons();
+
+            // Time & Progress representation
+            const currentTimeSec = (currentIndex * DT).toFixed(2);
+            timeLabel.innerText = currentTimeSec + 's';
+            
+            const percentage = Math.round((currentIndex / telemetryData.length) * 100);
+            progressPercentage.innerText = percentage + '%';
+            progressBar.style.width = percentage + '%';
+        }
+
+        // Playback Execution Loop
+        function runPlaybackStep() {
+            if (currentIndex >= telemetryData.length) {
+                stopSimulation();
+                return;
+            }
+            
+            updateDashboard(telemetryData[currentIndex]);
+            currentIndex += playbackSpeed;
+        }
+
+        function startSimulation() {
+            if (telemetryData.length === 0) return;
+            initAudio();
+            isPlaying = true;
+            btnPlay.disabled = true;
+            btnPause.disabled = false;
+            
+            simulationTimer = setInterval(runPlaybackStep, 20);
+        }
+
+        function pauseSimulation() {
+            isPlaying = false;
+            btnPlay.disabled = false;
+            btnPause.disabled = true;
+            clearInterval(simulationTimer);
+            stopHapticBeeps();
+        }
+
+        function stopSimulation() {
+            isPlaying = false;
+            btnPlay.disabled = telemetryData.length === 0;
+            btnPause.disabled = true;
+            clearInterval(simulationTimer);
+            stopHapticBeeps();
+        }
+
+        function resetSimulation() {
+            stopSimulation();
+            currentIndex = 0;
+            resetFilters();
+            if (telemetryData.length > 0) {
+                updateDashboard(telemetryData[0]);
+            }
+            btnPlay.disabled = false;
+        }
+
+        btnPlay.addEventListener('click', startSimulation);
+        btnPause.addEventListener('click', pauseSimulation);
+        btnReset.addEventListener('click', resetSimulation);
+    </script>
+</body>
+</html>
