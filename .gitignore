@@ -1,20 +1,7 @@
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.ipynb_checkpoints/
-
-# IDEs and Editors
-.vscode/
-.idea/
-.vs/
-*.suo
-*.user
-*.userossc
-*.sln
-*.docstates
-
-# OS temporary files
+node_modules/
+dist/
+dist-ssr/
+*.local
+.env
+.env.*
 .DS_Store
-Thumbs.db
